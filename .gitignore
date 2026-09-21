@@ -1,0 +1,32 @@
+# =========================================================================
+# Thermal_Comfort_PhD 專案標準忽略規則
+# =========================================================================
+
+# 1. 嚴格忽略所有原始數據與人體生理時序 CSV (符合 IRB 合規)
+data/raw/*
+!data/raw/.gitkeep
+*.csv
+*.xlsx
+*.xls
+*.gsheet
+
+# 2. 忽略所有二進位運算快取矩陣 (由腳本重新生成，不進版本控制)
+data/processed/*
+!data/processed/.gitkeep
+*.mat
+*.bin
+
+# 3. 忽略 MATLAB 暫存備份與崩潰記錄檔
+*.asv
+*.m~
+*.slxc
+matlab_crash_dump*
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 4. 忽略暫存檔案
+list.txt
+outputs/figures/*.tmp
+outputs/tables/*.tmp

@@ -1,0 +1,21 @@
+# MATLAB 自動生成的暫存與崩潰傾印檔
+*.asv
+*.m~
+matlab_crash_dump.*
+*.slxc
+
+# 排除大型資料檔與快取二進位檔 (避免 Git 儲存庫膨脹)
+*.mat
+*.csv
+*.xlsx
+*.parquet
+
+# 排除圖表二進位輸出 (圖表由腳本重新生成即可)
+*.fig
+
+# 排除作業系統暫存檔
+.DS_Store
+Thumbs.db
+
+# 例外保留：若有微型配置檔可透過 ! 排除忽略
+# !config/sample_config.csv
