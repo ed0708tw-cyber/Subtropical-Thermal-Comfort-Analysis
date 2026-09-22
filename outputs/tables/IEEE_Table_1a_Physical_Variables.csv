@@ -1,0 +1,10 @@
+Variable,N,Min,Max,Mean,Std_Dev,Skewness,Kurtosis
+Air Temp (Ta),16995,10.1,39.4,24.6,3.6,0.1,4.5
+Radiant Temp (Tr),16995,8.2,49.5,24.8,3.7,0.2,4.5
+Rel. Humidity (RH),16995,13,100,55.5,14.8,-0.4,2.8
+Air Velocity (Vel),16995,0,2.8,0.2,0.2,2.7,13.3
+Clothing (Clo),16995,0,2.9,0.6,0.3,1.8,9
+Metabolic Rate (Met),16995,0.7,3.2,1.2,0.2,2.7,15.6
+Vapor Pressure (e),16995,3.3,45.9,17.7,6.6,0.3,2.7
+Apparent Temp (AT),16995,7.2,46.7,26.3,5.3,0.2,3.4
+Thermal Sensation (TSV),16995,-3,3,0.1,1.2,0.2,3.6

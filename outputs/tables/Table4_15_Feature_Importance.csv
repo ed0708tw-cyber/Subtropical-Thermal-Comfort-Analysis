@@ -1,0 +1,19 @@
+Feature_Rank,Feature_Name,Physical_Category,OOB_Delta_Error,Relative_Importance_Pct,
+1,Vel (å®¤å…§å¾®é¢¨??,å°æ??›ç†± (Convective Flux),3.610848803,16.62499424,
+2,Met (ä»????,?§ç?ä»???¢ç†± (Internal Heat Source),3.43528514,15.81666771,
+3,I_{clo} (è¡???±é˜»),è¢«å?ä¿æº«?»æ? (Thermal Resistance),2.956424101,13.61190577,
+4,RH (?¸å?æ¿•åº¦),?¸å?æ½›ç†± (Relative Latent),2.937649012,13.5254619,
+5,AT_{mod} (äºç†±å¸¶é???,?¨åœ°?–å‚³?±å?é©?(Subtropical Physics Prior),2.407564716,11.08485891,
+6,e (å¯¦é?æ°´æ°£å£?,çµ•å?æ½›ç†±å£“é? (Absolute Latent Gradient),2.352362896,10.83069985,
+7,Ta (å®¤å…§æ°?º«),é¡¯ç†±?³å? (Sensible Heat),2.068617172,9.524283748,
+8,AT_{Steadman} (?¶å?é«”æ?),æ­ç?ç¶“é??ˆé? (Outdoor Empirical Prior),1.950646983,8.98112788,
+,,,,,
+­«­n©Ê±Æ§Ç (Rank),¯S¼xÅÜ¼Æ¦WºÙ (Feature Name),¼ö¤O¾Ç¶Ç¼ö¾÷¨î¤ÀÃş (Physical Category),³U¥~¸m´«»~®t¼W¶q (OOB Delta Error),"¬Û¹ï­«­n©Ê¦Ê¤À¤ñ (Relative Importance, %)",¶Ç¼öª«²z¨¤¦â»P±±¨îÃä»Ú°^Äm¸ÑÅª
+1,Vel («Ç¤º·L­·³t),¹ï¬y´«¼ö (Convective Flux),3.6108,16.62%,¥ş³õ­º­n¥D¾É¦]¤l¡Gª½±µ¯}ÃaÅéªí·L®ğ­Ô¼h¬yÃä¬É¼h¡AÄÀ©ñ¹ï¬y»P»]µo¼ç¯à¡C
+2,Met (¥NÁÂ²v),¤º¥Í¥NÁÂ²£¼ö (Internal Heat Source),3.4353,15.82%,¥Íª«¤º¥Í¼ö¬y·½¡G¨M©w®Ö¤ß¦VÅéªí¤§¼ö¬y³q¶q¡A¥D¾ÉÅé·Å°ÊºA½Õ¸`¥­¿Å¡C
+3,Iclo (¦çµÛ¼öªı),³Q°Ê«O·Åªı§Ü (Thermal Resistance),2.9564,13.61%,³Q°Ê¼öªı«Ì»Ù¡GªıÃªÅã¼ö»P¼ç¼ö¦V¥~¶Ç¾É¡A¨M©w¤HÅé»PÀô¹Ò¯à¶q¥æ´«¶Õ®t¡C
+4,RH (¬Û¹ïÀã«×),¬Û¹ï¼ç¼ö (Relative Latent),2.9376,13.53%,¤j®ğ¼ç¼ö§í¨î¡G°ª·Å¤Uª½±µ½Õ¨îÅéªí¦½²GÂX´²²v¡A¼vÅT»]µo´²¼ö®Ä²v¡C
+5,ATmod (¨È¼ö±aÅé·P),¦b¦a¤Æ¶Ç¼ö¥ıÅç (Subtropical Physics Prior),2.4076,11.08%,¦b¦aª«²zÁãÂI¡G­«®Õ·L­·¸ÉÀv»P¤ô®ğ«Y¼Æ¡A¦³®Ä«ü¤Ş¨Mµ¦¾ğ¯S¼x¤À³Î¥D¶b¡C
+6,e (¹ê»Ú¤ô®ğÀ£),µ´¹ï¼ç¼öÀ£¶¥ (Absolute Latent Gradient),2.3524,10.83%,µ´¹ï¼ö¤O¾ÇÅX°Ê¤O¡Gªí¼x¥Ö½§¹¡©M®ğÀ£»P¤j®ğ¤ô®ğÀ£®t¡A¨M©w±Æ¦½»]µo·¥­­¡C
+7,Ta («Ç¤º®ğ·Å),Åã¼ö¶Ç¾É (Sensible Heat),2.0686,9.52%,¼ö¤O¾Ç°ò©³°©¬[¡G´£¨Ñ¥~¦b·Å®t¶Õ¯à¡A¦ı¦b§¡¤Ã·Å³õ¤¤¤§Ãä»ÚÂZ°Ê±Ó·P«×¸û§C¡C
+8,ATSteadman (¤á¥~Åé·P),¼Ú¬ü¸gÅç¥ıÅç (Outdoor Empirical Prior),1.9506,8.98%,¥ş³õ°^Äm³Ì§C¡G°ª½n«×¤j­·¤á¥~±`¼Æ¤Şµo¥ıÅç¤zÂZ¡A©ó«Ç¤º¯S¼xªÅ¶¡Åv­«¨ü§í¡C

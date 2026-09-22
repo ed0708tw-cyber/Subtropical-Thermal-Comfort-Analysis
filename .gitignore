@@ -30,3 +30,14 @@ desktop.ini
 list.txt
 outputs/figures/*.tmp
 outputs/tables/*.tmp
+
+# 忽略自動生成之高解析度圖檔 (由管線腳本一鍵可重現)
+outputs/figures/*.png
+outputs/figures/*.eps
+outputs/figures/*.tif
+outputs/figures/*.jpg
+
+# 保留目錄結構與全部發表級輕量化統計表格
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!outputs/tables/*.csv

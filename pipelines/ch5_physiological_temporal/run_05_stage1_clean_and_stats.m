@@ -1,244 +1,332 @@
-%% run_05_stage1_clean_and_stats.m
-% =========================================================================
-% 國立臺北科技大學 熱舒適度研究專案
-% 第五章 階段 1：跨協定雙資料庫特徵對齊、標籤標準化與敘述性統計
-% 遵循 IEEE 學術規範，徹底修復 TSV_cat 變數名稱未定義與實體檔案載入問題
-% =========================================================================
+%% ========================================================================
+%  專案名稱：Thermal_Comfort_PhD
+%  腳本名稱：run_05_stage1_clean_and_stats.m
+%  功能描述：跨協定微觀生理資料清洗、出汗量同調化、心率遮罩構建與敘述性統計
+%  特色機制：動態特徵鍵值解析器、型別安全掃描、純原生高階統計矩 (免工具箱依賴)
+%  輸入檔案：data/raw/2022_CHEN_Raw.csv, data/raw/2022_SHEN_Raw.csv
+%  輸出檔案：data/processed/NTUT_Harmonized_Raw_Data.mat
+%           outputs/tables/Table5_1_Physiological_Descriptive_Stats.csv
+% ========================================================================
 clear; clc; close all;
 
-fprintf('=======================================================\n');
-fprintf('啟動第五章階段 1：生理時序資料庫融合與標籤標準化工程\n');
-fprintf('=======================================================\n');
-
-%% 步驟 1：實體資料庫智慧路徑搜尋與載入
-target_mat = 'NTUT_Harmonized_Raw_Data.mat';
-
-% 定義候選搜尋路徑
-search_dirs = {'.', fullfile('data', 'raw'), fullfile('..', 'data', 'raw')};
-
-% 陳乙賢檔案候選名稱清單
-chen_candidates = {'2022_CHEN_Raw.csv', ...
-                   '陳乙賢_AI訓練用數據_ALL_Attention_LSTM_Dataset_的副本.csv', ...
-                   '陳乙賢_AI訓練用數據_ALL.csv'};
-
-% 沈以塘檔案候選名稱清單
-shen_candidates = {'2022_SHEN_Raw.csv', ...
-                   '沈以塘_動態無刺激數據_Attention_LSTM_Dataset.csv', ...
-                   '沈以塘_動態無刺激數據.csv'};
-
-file_chen = find_existing_file(search_dirs, chen_candidates);
-file_shen = find_existing_file(search_dirs, shen_candidates);
-
-has_real_files = (~isempty(file_chen)) && (~isempty(file_shen));
-
-if has_real_files
-    fprintf('[資料讀取] 成功定位實體資料庫：\n');
-    fprintf('  - 陳乙賢資料集: %s\n', file_chen);
-    fprintf('  - 沈以塘資料集: %s\n', file_shen);
-    
-    opts_c = detectImportOptions(file_chen);
-    opts_c.VariableNamingRule = 'preserve';
-    T_c_raw = readtable(file_chen, opts_c);
-    
-    opts_s = detectImportOptions(file_shen);
-    opts_s.VariableNamingRule = 'preserve';
-    T_s_raw = readtable(file_shen, opts_s);
-    
-    fprintf('  - 陳乙賢原始資料筆數: %d 筆\n', height(T_c_raw));
-    fprintf('  - 沈以塘原始資料筆數: %d 筆\n', height(T_s_raw));
-    
-    % 提取陳乙賢特徵 (自動容錯別名)
-    c_vars = T_c_raw.Properties.VariableNames;
-    sub_c  = extract_var(T_c_raw, c_vars, {'Subject_ID', 'Subject', 'ID', '受試者', '編號'});
-    time_c = extract_var(T_c_raw, c_vars, {'Time_Min', 'Time', 'Minute', '時間', '分'});
-    temp_c = extract_var(T_c_raw, c_vars, {'Forehead_Temp', 'Temperature', 'T_forehead', '額溫', '前額溫度'});
-    flux_c = extract_var(T_c_raw, c_vars, {'Blood_Flux', 'Blood_Flow', 'BloodFlow', '血流', '血液流量'});
-    gsr_c  = extract_var(T_c_raw, c_vars, {'GSR_Max', 'Sweat', 'GSR', '出汗量', '出汗'});
-    hr_c   = extract_var(T_c_raw, c_vars, {'Heart_Rate', 'HeartRate', 'HR', '心率', '心跳速率'});
-    ta_c   = extract_var(T_c_raw, c_vars, {'Ta', 'Air_Temp', 'T_air', '氣溫', '室溫'});
-    rh_c   = extract_var(T_c_raw, c_vars, {'RH', 'Rel_Humidity', '濕度', '相對濕度'});
-    vel_c  = extract_var(T_c_raw, c_vars, {'Vel', 'Air_Velocity', '風速'});
-    act_c  = extract_var(T_c_raw, c_vars, {'Activity_State', 'Activity', '運動狀態'});
-    exp_c  = extract_var(T_c_raw, c_vars, {'Exposure_State', 'Exposure', '刺激狀態'});
-    tsv_c  = extract_var(T_c_raw, c_vars, {'TSV', 'Thermal_Sensation', '熱感覺'});
-    
-    % 陳乙賢受試者編號校正 (1 至 70)
-    if isempty(sub_c)
-        sub_c = [repelem((1:30)', 90); repelem((31:70)', 110)];
-        sub_c = sub_c(1:height(T_c_raw));
-    end
-    if isempty(time_c), time_c = (1:height(T_c_raw))'; end
-    if isempty(act_c),  act_c  = zeros(height(T_c_raw), 1); end
-    if isempty(exp_c),  exp_c  = ones(height(T_c_raw), 1); end
-    if isempty(ta_c),   ta_c   = 22.0 * ones(height(T_c_raw), 1); end
-    if isempty(rh_c),   rh_c   = 60.0 * ones(height(T_c_raw), 1); end
-    if isempty(vel_c),  vel_c  = 0.15 * ones(height(T_c_raw), 1); end
-    if isempty(hr_c),   hr_c   = nan(height(T_c_raw), 1); end
-    
-    % 提取沈以塘特徵
-    s_vars = T_s_raw.Properties.VariableNames;
-    sub_s  = extract_var(T_s_raw, s_vars, {'Subject_ID', 'Subject', 'ID', '受試者', '編號'});
-    time_s = extract_var(T_s_raw, s_vars, {'Time_Min', 'Time', 'Minute', '時間', '分'});
-    temp_s = extract_var(T_s_raw, s_vars, {'Forehead_Temp', 'Temperature', 'T_forehead', '額溫', '前額溫度'});
-    flux_s = extract_var(T_s_raw, s_vars, {'Blood_Flux', 'Blood_Flow', 'BloodFlow', '血流', '血液流量'});
-    gsr_s  = extract_var(T_s_raw, s_vars, {'GSR_Max', 'Sweat', 'GSR', '出汗量', '出汗'});
-    hr_s   = extract_var(T_s_raw, s_vars, {'Heart_Rate', 'HeartRate', 'HR', '心率', '心跳速率'});
-    ta_s   = extract_var(T_s_raw, s_vars, {'Ta', 'Air_Temp', 'T_air', '氣溫', '室溫'});
-    rh_s   = extract_var(T_s_raw, s_vars, {'RH', 'Rel_Humidity', '濕度', '相對濕度'});
-    vel_s  = extract_var(T_s_raw, s_vars, {'Vel', 'Air_Velocity', '風速'});
-    act_s  = extract_var(T_s_raw, s_vars, {'Activity_State', 'Activity', '運動狀態'});
-    exp_s  = extract_var(T_s_raw, s_vars, {'Exposure_State', 'Exposure', '刺激狀態'});
-    tsv_s  = extract_var(T_s_raw, s_vars, {'TSV', 'Thermal_Sensation', '熱感覺'});
-    
-    % 沈以塘受試者編號平移 (+70，構成 71 至 150)
-    if isempty(sub_s)
-        sub_s = repelem((71:150)', 60);
-        sub_s = sub_s(1:height(T_s_raw));
-    else
-        if max(sub_s) <= 80
-            sub_s = sub_s + 70;
-        end
-    end
-    if isempty(time_s), time_s = repmat((1:60)', 80, 1); time_s = time_s(1:height(T_s_raw)); end
-    if isempty(act_s),  act_s  = ones(height(T_s_raw), 1); end
-    if isempty(exp_s),  exp_s  = repmat([zeros(20,1); ones(20,1); 2*ones(20,1)], 80, 1); exp_s = exp_s(1:height(T_s_raw)); end
-    if isempty(ta_s),   ta_s   = 22.2 * ones(height(T_s_raw), 1); end
-    if isempty(rh_s),   rh_s   = 60.5 * ones(height(T_s_raw), 1); end
-    if isempty(vel_s),  vel_s  = 0.10 * ones(height(T_s_raw), 1); end
-    
-    % 垂直合併向量
-    Subject_ID     = [sub_c; sub_s];
-    Time_Min       = [time_c; time_s];
-    Forehead_Temp  = [temp_c; temp_s];
-    Blood_Flux     = [flux_c; flux_s];
-    GSR_Max        = [gsr_c; gsr_s];
-    Heart_Rate     = [hr_c; hr_s];
-    Ta             = [ta_c; ta_s];
-    RH             = [rh_c; rh_s];
-    Vel            = [vel_c; vel_s];
-    Activity_State = [act_c; act_s];
-    Exposure_State = [exp_c; exp_s];
-    TSV_raw        = [tsv_c; tsv_s];
-    
+% 1. 取得專案根目錄與路徑錨定
+script_path = mfilename('fullpath');
+if isempty(script_path)
+    project_root = pwd;
 else
-    % =====================================================================
-    % 備用安全模組：符合實驗協定整數陣列
-    % =====================================================================
-    fprintf('[安全模式] 未偵測到實體 CSV 檔案，啟動符合論文協定之基線陣列...\n');
-    N_c = 7100;
-    N_s = 4800;
-    N_total = N_c + N_s;
-    
-    Subject_ID     = [repelem((1:30)', 90); repelem((31:70)', 110); repelem((71:150)', 60)];
-    Time_Min       = [repmat((1:90)', 30, 1); repmat((1:110)', 40, 1); repmat((1:60)', 80, 1)];
-    
-    rng(42);
-    Forehead_Temp  = [34.50 + 0.55 * randn(N_c, 1); 35.10 + 0.75 * randn(N_s, 1)];
-    Blood_Flux     = [exp(4.0 + 0.48 * randn(N_c, 1)); exp(4.4 + 0.58 * randn(N_s, 1))];
-    GSR_Max        = [350 + 75 * randn(N_c, 1); 420 + 105 * randn(N_s, 1)];
-    Heart_Rate     = [nan(2700, 1); 78 + 8 * randn(N_c - 2700, 1); 98 + 14 * randn(N_s, 1)];
-    Ta             = [22.0 * ones(N_c, 1); 22.2 * ones(N_s, 1)] + 0.15 * randn(N_total, 1);
-    RH             = [60.0 * ones(N_c, 1); 60.5 * ones(N_s, 1)] + 0.85 * randn(N_total, 1);
-    Vel            = [0.15 * ones(N_c, 1); 0.10 * ones(N_s, 1)] + 0.02 * randn(N_total, 1);
-    Activity_State = [zeros(N_c, 1); ones(N_s, 1)];
-    Exposure_State = [repmat([zeros(10,1); ones(20,1); 2*ones(20,1); ones(20,1); 2*ones(20,1)], 30, 1); ...
-                      repmat([zeros(10,1); ones(20,1); 2*ones(20,1); ones(20,1); 2*ones(40,1)], 40, 1); ...
-                      repmat([zeros(20,1); ones(20,1); 2*ones(20,1)], 80, 1)];
-    TSV_raw        = [randn(N_c, 1) * 1.05; 0.52 + randn(N_s, 1) * 1.15];
+    project_root = fileparts(fileparts(fileparts(script_path)));
 end
 
-%% 步驟 2：目標標籤標準化 (雙軌映射：數值型 TSV 與類別型 TSV_cat)
-TSV_num = max(min(round(TSV_raw), 3), -3);
-TSV_cat = categorical(TSV_num, -3:3, ...
-    {'極冷(-3)', '冷(-2)', '微涼(-1)', '中性(0)', '微暖(+1)', '暖(+2)', '極熱(+3)'});
+raw_dir   = fullfile(project_root, 'data', 'raw');
+proc_dir  = fullfile(project_root, 'data', 'processed');
+table_dir = fullfile(project_root, 'outputs', 'tables');
 
-% 組裝完整對齊表格 (同時提供 TSV_cat 與 TSV_Label 欄位，杜絕未命名錯誤)
-NTUT_Harmonized_Table = table(Subject_ID, Time_Min, Forehead_Temp, Blood_Flux, ...
-    GSR_Max, Heart_Rate, Ta, RH, Vel, Activity_State, Exposure_State, TSV_num, TSV_cat, TSV_cat, ...
-    'VariableNames', {'Subject_ID', 'Time_Min', 'Forehead_Temp', 'Blood_Flux', ...
-    'GSR_Max', 'Heart_Rate', 'Ta', 'RH', 'Vel', 'Activity_State', 'Exposure_State', ...
-    'TSV', 'TSV_cat', 'TSV_Label'});
+if ~exist(proc_dir, 'dir'), mkdir(proc_dir); end
+if ~exist(table_dir, 'dir'), mkdir(table_dir); end
 
-fprintf('[資訊] 資料表融合對齊成功！總樣本筆數: %d 筆\n', height(NTUT_Harmonized_Table));
-fprintf('  - 受試者總數: %d 位 (陳乙賢 1~70, 沈以塘 71~150)\n', length(unique(Subject_ID)));
-fprintf('  - 心率缺失筆數: %d 筆 (缺失率: %.2f%%，確立 CMM 遮罩機制)\n', ...
-    sum(isnan(Heart_Rate)), mean(isnan(Heart_Rate)) * 100);
+fprintf('====================================================================\n');
+fprintf('  第五章步驟 1 & 2：跨協定生理資料清洗、量綱同調化與統計管線啟動\n');
+fprintf('  專案根目錄：%s\n', project_root);
+fprintf('====================================================================\n\n');
 
-%% 步驟 3：修復圖表渲染與繁體中文字型 (已驗證相容 NTUT_Harmonized_Table.TSV_cat)
-figure('Name', 'NTUT Physiological and Thermal Sensation Distribution', ...
-       'Color', 'w', 'Position', [100, 100, 1000, 650]);
+% 2. 原始母表檔案完整性檢核與讀取
+chen_file = fullfile(raw_dir, '2022_CHEN_Raw.csv');
+shen_file = fullfile(raw_dir, '2022_SHEN_Raw.csv');
 
-% 子圖 1：目標標籤 TSV 分佈直方圖
-subplot(2, 2, 1);
-histogram(NTUT_Harmonized_Table.TSV_cat, 'DisplayOrder', 'ascend', ...
-          'FaceColor', [0.2, 0.45, 0.75], 'EdgeColor', 'k');
-title('目標真值 TSV 7 階分佈 (N = 11,900)', 'FontSize', 11, 'FontWeight', 'bold', ...
-      'FontName', 'Microsoft JhengHei');
-xlabel('熱感覺投票尺度', 'FontSize', 10, 'FontName', 'Microsoft JhengHei');
-ylabel('時序樣本數 (筆)', 'FontSize', 10, 'FontName', 'Microsoft JhengHei');
-grid on; set(gca, 'FontName', 'Microsoft JhengHei');
+if ~exist(chen_file, 'file') || ~exist(shen_file, 'file')
+    error('錯誤：找不到原始資料母表，請確認 2022_CHEN_Raw.csv 與 2022_SHEN_Raw.csv 已放置於 data/raw/ 目錄下。');
+end
 
-% 子圖 2：前額溫度對 TSV 箱型圖
-subplot(2, 2, 2);
-boxchart(NTUT_Harmonized_Table.TSV_cat, NTUT_Harmonized_Table.Forehead_Temp, ...
-         'BoxFaceColor', [0.85, 0.35, 0.25], 'MarkerStyle', 'none');
-title('前額體表溫度於各 TSV 階梯之分佈', 'FontSize', 11, 'FontWeight', 'bold', ...
-      'FontName', 'Microsoft JhengHei');
-xlabel('熱感覺投票標籤', 'FontSize', 10, 'FontName', 'Microsoft JhengHei');
-ylabel('前額體表溫度 (°C)', 'FontSize', 10, 'FontName', 'Microsoft JhengHei');
-grid on; set(gca, 'FontName', 'Microsoft JhengHei');
+fprintf('1. 讀取陳乙賢與沈以塘原始母表...\n');
+opts_chen = detectImportOptions(chen_file, 'VariableNamingRule', 'preserve');
+chen_raw = readtable(chen_file, opts_chen);
+fprintf('   陳乙賢母表載入成功，原始記錄總筆數：%d\n', height(chen_raw));
+fprintf('   陳乙賢原始欄位清單: [%s]\n', strjoin(chen_raw.Properties.VariableNames, ', '));
 
-% 子圖 3：微血管血流量對數長尾分佈
-subplot(2, 2, 3);
-histogram(log10(max(NTUT_Harmonized_Table.Blood_Flux, 1e-3)), 30, ...
-          'FaceColor', [0.3, 0.7, 0.4], 'EdgeColor', 'k');
-title('微血管血流量對數長尾分佈 (log10 PU)', 'FontSize', 11, 'FontWeight', 'bold', ...
-      'FontName', 'Microsoft JhengHei');
-xlabel('log10(微血管血流量, PU)', 'FontSize', 10, 'FontName', 'Microsoft JhengHei');
-ylabel('頻率 (筆)', 'FontSize', 10, 'FontName', 'Microsoft JhengHei');
-grid on; set(gca, 'FontName', 'Microsoft JhengHei');
+opts_shen = detectImportOptions(shen_file, 'VariableNamingRule', 'preserve');
+shen_raw = readtable(shen_file, opts_shen);
+fprintf('   沈以塘母表載入成功，原始記錄總筆數：%d\n', height(shen_raw));
+fprintf('   沈以塘原始欄位清單: [%s]\n\n', strjoin(shen_raw.Properties.VariableNames, ', '));
 
-% 子圖 4：心率通道遮罩有效性圓餅圖
-subplot(2, 2, 4);
-hr_valid = ~isnan(NTUT_Harmonized_Table.Heart_Rate);
-pie([sum(hr_valid), sum(~hr_valid)], {'有效採樣 (74.79%)', '協定缺失 (25.21%)'});
-title('心率通道採樣完整度與 CMM 遮罩比例', 'FontSize', 11, 'FontWeight', 'bold', ...
-      'FontName', 'Microsoft JhengHei');
-set(gca, 'FontName', 'Microsoft JhengHei');
+% 3. 定義特徵鍵值候選模式庫 (Feature-Key Candidate Patterns)
+pat_sub   = {'Subject_ID', 'SubjectID', 'Subject', 'ID', '受試者編號', '受試者', '編號'};
+pat_time  = {'Time_Min', 'TimeMin', 'Time', 'Minute', 'Min', '時間', '分'};
+pat_temp  = {'Forehead_Temp', 'Forehead_Temperature', 'ForeheadTemp', 'Temperature', 'Temp', ...
+             'Forehead', 'T_sk', 'Tsk', '前額溫度', '額頭溫度', '體表溫度', '額溫', 'T'};
+pat_bf    = {'Blood_Flow', 'BloodFlow', 'Blood_flow', 'Blood', 'SBF', 'Flux', '血液流量', '血流量', 'LDF', 'BF'};
+pat_sweat = {'Sweat', 'GSR', 'Delta_Sweat', '出汗量', '汗量', 'Sweating', 'Pore', 'S'};
+pat_hr    = {'Heart_Rate', 'HeartRate', 'Heart_rate', 'Heart', 'HR', 'Pulse', '心跳速率', '心率', '心跳'};
+pat_tsv   = {'TSV', 'Thermal_Sensation', 'ThermalSensation', '熱感覺投票', '熱感覺', '投票值', 'Vote'};
 
-%% 步驟 4：保存標準對齊資產
-save(target_mat, 'NTUT_Harmonized_Table', '-v7.3');
-fprintf('=======================================================\n');
-fprintf('[資產保存] 成功輸出對齊資產至 %s\n', target_mat);
-fprintf('=======================================================\n');
+% 4. 解析陳乙賢母表欄位映射
+col_c_sub   = resolve_col(chen_raw, pat_sub, 'Subject_ID');
+col_c_time  = resolve_col(chen_raw, pat_time, 'Time');
+col_c_temp  = resolve_col(chen_raw, pat_temp, 'Temperature');
+col_c_bf    = resolve_col(chen_raw, pat_bf, 'Blood_Flow');
+col_c_sweat = resolve_col(chen_raw, pat_sweat, 'Sweat');
+col_c_tsv   = resolve_col(chen_raw, pat_tsv, 'TSV');
 
-%% 輔助函數 1：多目錄候選檔案比對
-function found_path = find_existing_file(dirs, candidates)
-    found_path = '';
-    for d = 1:length(dirs)
-        for c = 1:length(candidates)
-            target = fullfile(dirs{d}, candidates{c});
-            if exist(target, 'file')
-                found_path = target;
+fprintf('2. 陳乙賢特徵映射確認：\n');
+fprintf('   ID:[%s], Time:[%s], Temp:[%s], BloodFlow:[%s], Sweat:[%s], TSV:[%s]\n\n', ...
+    col_c_sub, col_c_time, col_c_temp, col_c_bf, col_c_sweat, col_c_tsv);
+
+% 強制型別轉換為 double
+chen_raw.(col_c_time)  = to_double(chen_raw.(col_c_time));
+chen_raw.(col_c_temp)  = to_double(chen_raw.(col_c_temp));
+chen_raw.(col_c_bf)    = to_double(chen_raw.(col_c_bf));
+chen_raw.(col_c_sweat) = to_double(chen_raw.(col_c_sweat));
+chen_raw.(col_c_tsv)   = to_double(chen_raw.(col_c_tsv));
+
+% 5. 執行陳乙賢前處理 (基準期 10 分鐘，出汗同調化)
+fprintf('3. 執行陳乙賢資料集前處理 (預期受試者規模：70 人)...\n');
+chen_sub_ids = string(chen_raw.(col_c_sub));
+chen_subjects = unique(chen_sub_ids, 'stable');
+chen_subjects(chen_subjects == "" | chen_subjects == "NaN" | ismissing(chen_subjects)) = [];
+
+chen_clean_cells = cell(length(chen_subjects), 1);
+
+for s_idx = 1:length(chen_subjects)
+    sid = chen_subjects(s_idx);
+    sub_data = chen_raw(chen_sub_ids == sid, :);
+    
+    % 生理物理邊界合理性截斷
+    valid_mask = sub_data.(col_c_temp) >= 28.0 & sub_data.(col_c_temp) <= 39.0 & ...
+                 sub_data.(col_c_bf) > 0 & ...
+                 ~isnan(sub_data.(col_c_tsv));
+    sub_data = sub_data(valid_mask, :);
+    
+    if isempty(sub_data), continue; end
+    
+    % 陳乙賢試驗協定初始基準期鎖定為前 10 分鐘
+    time_vec = sub_data.(col_c_time);
+    baseline_mask = time_vec <= 10;
+    if ~any(baseline_mask)
+        baseline_mask = 1:min(5, height(sub_data));
+    end
+    
+    base_sweat = mean(sub_data.(col_c_sweat)(baseline_mask), 'omitnan');
+    if base_sweat <= 0 || isnan(base_sweat)
+        delta_sweat = zeros(height(sub_data), 1);
+    else
+        delta_sweat = ((sub_data.(col_c_sweat) - base_sweat) ./ base_sweat) .* 100;
+    end
+    
+    harmonized_sub = table();
+    harmonized_sub.Subject_ID      = repmat(s_idx, height(sub_data), 1);
+    harmonized_sub.Protocol_Source = repmat({'CHEN_2022'}, height(sub_data), 1);
+    harmonized_sub.Time_Step       = time_vec;
+    harmonized_sub.T_sk            = sub_data.(col_c_temp);
+    harmonized_sub.SBF             = sub_data.(col_c_bf);
+    harmonized_sub.Delta_Sweat     = delta_sweat;
+    harmonized_sub.HR              = zeros(height(sub_data), 1);
+    harmonized_sub.Mask_HR         = zeros(height(sub_data), 1);
+    harmonized_sub.TSV             = round(sub_data.(col_c_tsv));
+    
+    chen_clean_cells{s_idx} = harmonized_sub;
+end
+chen_harmonized = vertcat(chen_clean_cells{:});
+fprintf('   陳乙賢清洗對齊完成，清洗後有效時序樣本數：%d\n\n', height(chen_harmonized));
+
+% 6. 解析沈以塘母表欄位映射
+col_s_sub   = resolve_col(shen_raw, pat_sub, 'Subject_ID');
+col_s_time  = resolve_col(shen_raw, pat_time, 'Time');
+col_s_temp  = resolve_col(shen_raw, pat_temp, 'Temperature');
+col_s_bf    = resolve_col(shen_raw, pat_bf, 'Blood_Flow');
+col_s_sweat = resolve_col(shen_raw, pat_sweat, 'Sweat');
+col_s_hr    = resolve_col(shen_raw, pat_hr, 'Heart_Rate');
+col_s_tsv   = resolve_col(shen_raw, pat_tsv, 'TSV');
+
+fprintf('4. 沈以塘特徵映射確認：\n');
+fprintf('   ID:[%s], Time:[%s], Temp:[%s], BloodFlow:[%s], Sweat:[%s], HR:[%s], TSV:[%s]\n\n', ...
+    col_s_sub, col_s_time, col_s_temp, col_s_bf, col_s_sweat, col_s_hr, col_s_tsv);
+
+% 強制型別轉換為 double
+shen_raw.(col_s_time)  = to_double(shen_raw.(col_s_time));
+shen_raw.(col_s_temp)  = to_double(shen_raw.(col_s_temp));
+shen_raw.(col_s_bf)    = to_double(shen_raw.(col_s_bf));
+shen_raw.(col_s_sweat) = to_double(shen_raw.(col_s_sweat));
+shen_raw.(col_s_hr)    = to_double(shen_raw.(col_s_hr));
+shen_raw.(col_s_tsv)   = to_double(shen_raw.(col_s_tsv));
+
+% 7. 執行沈以塘前處理 (基準期 20 分鐘，保留心率，遮罩賦值 1)
+fprintf('5. 執行沈以塘資料集前處理 (預期受試者規模：80 人)...\n');
+shen_sub_ids = string(shen_raw.(col_s_sub));
+shen_subjects = unique(shen_sub_ids, 'stable');
+shen_subjects(shen_subjects == "" | shen_subjects == "NaN" | ismissing(shen_subjects)) = [];
+
+shen_clean_cells = cell(length(shen_subjects), 1);
+
+for s_idx = 1:length(shen_subjects)
+    sid = shen_subjects(s_idx);
+    sub_data = shen_raw(shen_sub_ids == sid, :);
+    
+    % 生理物理邊界合理性截斷
+    valid_mask = sub_data.(col_s_temp) >= 28.0 & sub_data.(col_s_temp) <= 39.0 & ...
+                 sub_data.(col_s_bf) > 0 & ...
+                 sub_data.(col_s_hr) >= 45.0 & sub_data.(col_s_hr) <= 200.0 & ...
+                 ~isnan(sub_data.(col_s_tsv));
+    sub_data = sub_data(valid_mask, :);
+    
+    if isempty(sub_data), continue; end
+    
+    % 沈以塘試驗協定初始基準期鎖定為前 20 分鐘
+    time_vec = sub_data.(col_s_time);
+    baseline_mask = time_vec <= 20;
+    if ~any(baseline_mask)
+        baseline_mask = 1:min(10, height(sub_data));
+    end
+    
+    base_sweat = mean(sub_data.(col_s_sweat)(baseline_mask), 'omitnan');
+    if base_sweat <= 0 || isnan(base_sweat)
+        delta_sweat = zeros(height(sub_data), 1);
+    else
+        delta_sweat = ((sub_data.(col_s_sweat) - base_sweat) ./ base_sweat) .* 100;
+    end
+    
+    harmonized_sub = table();
+    harmonized_sub.Subject_ID      = repmat(s_idx + 70, height(sub_data), 1);
+    harmonized_sub.Protocol_Source = repmat({'SHEN_2022'}, height(sub_data), 1);
+    harmonized_sub.Time_Step       = time_vec;
+    harmonized_sub.T_sk            = sub_data.(col_s_temp);
+    harmonized_sub.SBF             = sub_data.(col_s_bf);
+    harmonized_sub.Delta_Sweat     = delta_sweat;
+    harmonized_sub.HR              = sub_data.(col_s_hr);
+    harmonized_sub.Mask_HR         = ones(height(sub_data), 1);
+    harmonized_sub.TSV             = round(sub_data.(col_s_tsv));
+    
+    shen_clean_cells{s_idx} = harmonized_sub;
+end
+shen_harmonized = vertcat(shen_clean_cells{:});
+fprintf('   沈以塘清洗對齊完成，清洗後有效時序樣本數：%d\n\n', height(shen_harmonized));
+
+% 8. 跨協定融合與固化
+harmonized_master_data = [chen_harmonized; shen_harmonized];
+total_subjects = length(unique(harmonized_master_data.Subject_ID));
+fprintf('6. 跨協定資料融合成功：\n');
+fprintf('   總受試人數：%d 位 (陳乙賢 70 位 + 沈以塘 80 位)\n', total_subjects);
+fprintf('   總有效時序筆數：%d 筆\n\n', height(harmonized_master_data));
+
+save(fullfile(proc_dir, 'NTUT_Harmonized_Raw_Data.mat'), ...
+    'harmonized_master_data', 'chen_harmonized', 'shen_harmonized', '-v7.3');
+fprintf('   主對齊資料表已固化至：%s\n\n', fullfile(proc_dir, 'NTUT_Harmonized_Raw_Data.mat'));
+
+% 9. 步驟 2：原生高階統計矩敘述性統計 (Table 5.1 產出，免工具箱依賴)
+fprintf('7. 演算 Table 5.1 生理參數敘述性統計報表 (原生矩陣算法)...\n');
+var_names = {'T_sk', 'SBF', 'Delta_Sweat', 'HR', 'TSV'};
+stats_data = cell(length(var_names), 9);
+
+for i = 1:length(var_names)
+    vname = var_names{i};
+    raw_vals = harmonized_master_data.(vname);
+    
+    if strcmp(vname, 'HR')
+        valid_vals = raw_vals(harmonized_master_data.Mask_HR == 1);
+        na_count   = sum(harmonized_master_data.Mask_HR == 0);
+    else
+        valid_vals = raw_vals;
+        na_count   = 0;
+    end
+    
+    n_valid   = length(valid_vals);
+    na_pct    = (na_count / height(harmonized_master_data)) * 100;
+    mean_val  = mean(valid_vals, 'omitnan');
+    std_val   = std(valid_vals, 'omitnan');
+    min_val   = min(valid_vals);
+    max_val   = max(valid_vals);
+    
+    % 調用原生封裝之偏態與 Pearson 峰度函數 (零工具箱依賴)
+    skew_val  = calc_skewness(valid_vals);
+    kurt_val  = calc_kurtosis(valid_vals);
+    
+    stats_data(i, :) = {vname, n_valid, min_val, max_val, mean_val, std_val, skew_val, kurt_val, na_pct};
+end
+
+Table5_1 = cell2table(stats_data, 'VariableNames', ...
+    {'Variable', 'N_Valid', 'Min', 'Max', 'Mean', 'Std_Dev', 'Skewness', 'Kurtosis', 'Missing_Pct'});
+
+writetable(Table5_1, fullfile(table_dir, 'Table5_1_Physiological_Descriptive_Stats.csv'));
+fprintf('   Table 5.1 已匯出至：%s\n\n', fullfile(table_dir, 'Table5_1_Physiological_Descriptive_Stats.csv'));
+disp(Table5_1);
+
+fprintf('====================================================================\n');
+fprintf('  第五章步驟 1 與步驟 2 資料工程管線執行完畢，成果確證！\n');
+fprintf('====================================================================\n');
+
+%% ========================================================================
+%  局部輔助函數庫 (Local Helper Functions - 100% 原生無工具箱依賴)
+% ========================================================================
+function col = resolve_col(tbl, patterns, semantic_name)
+    % 動態掃描匹配欄位
+    vars = tbl.Properties.VariableNames;
+    col = '';
+    
+    % 1. 精確匹配 (去除底線與空格後轉小寫比對)
+    norm_vars = lower(regexprep(vars, '[_\s]', ''));
+    for i = 1:length(patterns)
+        norm_pat = lower(regexprep(patterns{i}, '[_\s]', ''));
+        idx = find(strcmp(norm_vars, norm_pat));
+        if ~isempty(idx)
+            col = vars{idx(1)};
+            return;
+        end
+    end
+    
+    % 2. 包含匹配
+    for i = 1:length(patterns)
+        norm_pat = lower(regexprep(patterns{i}, '[_\s]', ''));
+        for j = 1:length(norm_vars)
+            if ~isempty(strfind(norm_vars{j}, norm_pat))
+                col = vars{j};
                 return;
             end
         end
     end
+    
+    error('無法於資料表中解析出符合 [%s] 語義之特徵欄位，現有欄位為：[%s]', ...
+        semantic_name, strjoin(vars, ', '));
 end
 
-%% 輔助函數 2：欄位別名容錯搜尋
-function val = extract_var(T, col_names, candidate_names)
-    val = [];
-    for k = 1:length(candidate_names)
-        match_idx = find(strcmpi(col_names, candidate_names{k}), 1);
-        if ~isempty(match_idx)
-            raw_data = T.(col_names{match_idx});
-            if iscell(raw_data) || isstring(raw_data)
-                val = str2double(raw_data);
-            else
-                val = double(raw_data);
-            end
-            return;
-        end
+function out = to_double(in_col)
+    % 強制數值型別轉換
+    if iscell(in_col) || isstring(in_col) || iscategorical(in_col)
+        out = str2double(string(in_col));
+    else
+        out = double(in_col);
+    end
+end
+
+function s = calc_skewness(x)
+    % 原生三階中心矩偏態演算 (免除 SMLT 工具箱依賴)
+    x = x(~isnan(x));
+    n = length(x);
+    if n < 3
+        s = NaN;
+        return;
+    end
+    x_bar = mean(x);
+    m2 = mean((x - x_bar).^2);
+    m3 = mean((x - x_bar).^3);
+    if m2 == 0
+        s = 0;
+    else
+        s = m3 / (m2^1.5);
+    end
+end
+
+function k = calc_kurtosis(x)
+    % 原生四階中心矩峰度演算 (採 Pearson 常規定義，常態分佈基準值為 3.0)
+    x = x(~isnan(x));
+    n = length(x);
+    if n < 4
+        k = NaN;
+        return;
+    end
+    x_bar = mean(x);
+    m2 = mean((x - x_bar).^2);
+    m4 = mean((x - x_bar).^4);
+    if m2 == 0
+        k = 0;
+    else
+        k = m4 / (m2^2);
     end
 end
